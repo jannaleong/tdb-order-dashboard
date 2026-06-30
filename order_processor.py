@@ -1,0 +1,196 @@
+import pandas as pd
+from shopify_client import get_orders
+import re
+from datetime import datetime
+
+# definining add-on products
+MUSIC_BOX_SKUS = {
+    "Music-HDB",
+    "Music-AWM",
+    "Music-OTR",
+    "Music-BB",
+}
+SCENT_SKUS = {
+    "LAV50",
+    "FRE50",
+    "ROS50",
+    "LIL50",
+    "MAG50",
+}
+
+# helper functions
+def is_ribbon(sku):
+    return sku == "Ribbon"
+
+def is_music_box(sku):
+    return sku in MUSIC_BOX_SKUS
+
+def is_polaroid(sku):
+    return sku == "Polaroid"
+
+def is_scent(sku):
+    return sku in SCENT_SKUS
+
+def get_delivery_date(order, item):
+    # loop through properties and return 
+    # delivery date if this property is available
+    for prop in item.get("properties", []):
+        if prop["name"] == "Delivery Date":
+            return prop["value"]
+
+    # if no delivery date property is available,
+    # search for delivery date within given tags
+    match = re.search(r"\d{4}-\d{2}-\d{2}", order["tags"])
+    if match:
+        return match.group()
+    
+    return None
+
+def standardise_date(date_str):
+    if not date_str:
+        return None
+
+    formats = [
+        "%Y-%m-%d",   # 2026-07-30
+        "%d/%m/%Y",   # 25/6/2026
+    ]
+
+    for fmt in formats:
+        try:
+            date = datetime.strptime(date_str, fmt)
+            return date.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+
+    print(f"Warning: Unknown date format: {date_str}")
+    return None
+
+
+def get_delivery_slot(order, item):
+    slot_names = [
+        "Delivery Timeslot Weekday",
+        "Delivery Timeslot Weekend",
+        "Delivery Timeslot Seasonal",
+        "Pickup Timeslot Weekday",
+        "Pickup Timeslot Weekend",
+    ]
+
+    # loop through properties and return 
+    # delivery or pickup timeslot if this property is available
+    for name in slot_names:
+        for prop in item.get("properties", []):
+            if prop["name"] == name and prop["value"]:
+                return prop["value"]
+            
+    # if no delivery or pickup timeslot is available,
+    # search for delivery or pickup timeslotwithin given tags
+    if "9:00 AM - 2:00 PM" in order["tags"]:
+        return "9:00 AM - 2:00 PM"
+    if "12:00 PM - 3:00 PM" in order["tags"]:
+        return "12:00 PM - 3:00 PM"
+    if "3:00 PM - 5:00 PM" in order["tags"]:
+        return "3:00 PM - 5:00 PM"
+    if "1:00 PM - 6:00 PM" in order["tags"]:
+        return "1:00 PM - 6:00 PM"
+    if "5:00 PM - 10:00 PM" in order["tags"]:
+        return "5:00 PM - 10:00 PM"
+    if "walk in" in order["tags"].lower():
+        return "Walk In"
+    if "self pickup" in order["tags"].lower():
+        m = re.search(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)", order["tags"])
+        if m:
+            hour = int(m.group(1))
+            minute = m.group(2) or "00"
+            ampm = m.group(3).upper()
+            return f"Self Pickup - {hour}:{minute} {ampm}"
+        return "Self Pickup"
+    tags = order["tags"]
+    m = re.search(r"\b\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)\b", tags)
+    if m:
+        return f"Custom - {m.group()}"
+
+    return None
+
+# main function to process orders
+def process_orders():
+    orders = get_orders()
+
+    # looping through json of retrieved orders
+    # and extracting the necessary order details
+    rows = []
+    for order in orders:
+        for item in order["line_items"]:
+            rows.append({
+                "order": order["name"],
+                "tags": order["tags"],
+                "sku": item["sku"],
+                "product": item["title"],
+                "qty": item["quantity"],
+                "delivery_date": standardise_date(get_delivery_date(order, item)),
+                "delivery_slot": get_delivery_slot(order, item)
+            })
+
+    df = pd.DataFrame(rows)
+
+    # merge add-ons with main orders
+    processed_rows = []
+    for order_id, group in df.groupby("order"):
+        ribbon = False
+        music_box = [] # can improve by saying specifically what music box
+        polaroid = False
+        scent = [] # can improve by saying specifically what scent
+        main_sku = None
+        qty = None
+        delivery_date = None
+        delivery_slot = None
+
+        for _, row in group.iterrows():
+            sku = row["sku"]
+            if is_ribbon(sku):
+                ribbon = True
+            elif is_music_box(sku):
+                music_box.append(sku)
+            elif is_polaroid(sku):
+                polaroid = True
+            elif is_scent(sku):
+                scent.append(sku)
+            else:
+                if main_sku is not None:
+                    main_sku = f"COMPLEX ORDER (>1 main item)"
+                    break
+                main_sku = sku
+                qty = row["qty"]
+                delivery_date = row["delivery_date"]
+                delivery_slot = row["delivery_slot"]
+
+        if main_sku is None:
+            main_sku = "CUSTOM ORDER"
+
+        processed_rows.append({
+            "Order": order_id,
+            "SKU": main_sku,
+            "Quantity": qty,
+            "Ribbon": ribbon,
+            "Music Box": music_box,
+            "Polaroid": polaroid,
+            "Scent": scent,
+            "Delivery Slot": delivery_slot,
+            "Delivery Date": delivery_date
+        })
+
+    processed_df = pd.DataFrame(processed_rows)
+
+    # only keep relevant orders from today onwards
+    today = pd.Timestamp.today().normalize()
+    processed_df["Delivery Date"] = pd.to_datetime(
+        processed_df["Delivery Date"],
+        errors="coerce"
+    )
+    current_orders_df = processed_df[processed_df["Delivery Date"] >= today]
+
+    # sort orders
+    sorted_processed_df = current_orders_df.sort_values(by=["Delivery Date", "Delivery Slot", "SKU"])
+    sorted_processed_df.to_csv("sorted_processed_df.csv", index=False)
+
+    return  sorted_processed_df
+
