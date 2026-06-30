@@ -1,6 +1,29 @@
 import streamlit as st
 from order_processor import process_orders
 
+def check_password():
+    if st.session_state.get("authenticated", False):
+        return True
+
+    st.title("🌸 The Daily Blooms Dashboard")
+
+    password = st.text_input(
+        "Password",
+        type="password"
+    )
+
+    if st.button("Login"):
+        if password == st.secrets["APP_PASSWORD"]:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Incorrect password")
+
+    return False
+
+if not check_password():
+    st.stop()
+
 # set windows tab
 st.set_page_config(
     page_title="The Daily Blooms Dashboard",
