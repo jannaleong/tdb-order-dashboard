@@ -36,14 +36,19 @@ def get_delivery_date(order, item):
     # delivery date if this property is available
     for prop in item.get("properties", []):
         if prop["name"] == "Delivery Date":
-            return prop["value"]
+            # in cases of a date change
+            # search for delivery date within given tags
+             if "datechange" in order["tags"].lower() or "date change" in order["tags"].lower() :
+                 match = re.search(r"\d{4}-\d{2}-\d{2}", order["tags"])
+                 if match:
+                    return match.group()
+             return prop["value"]
 
     # if no delivery date property is available,
     # search for delivery date within given tags
     match = re.search(r"\d{4}-\d{2}-\d{2}", order["tags"])
     if match:
         return match.group()
-    
     return None
 
 def standardise_date(date_str):
