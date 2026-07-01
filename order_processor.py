@@ -96,14 +96,14 @@ def get_delivery_slot(order, item):
         return "5:00 PM - 10:00 PM"
     if "walk in" in order["tags"].lower():
         return "Walk In"
-    if "self pickup" in order["tags"].lower():
+    if "pickup" in order["tags"].lower():
         m = re.search(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)", order["tags"])
         if m:
             hour = int(m.group(1))
             minute = m.group(2) or "00"
             ampm = m.group(3).upper()
-            return f"Self Pickup - {hour}:{minute} {ampm}"
-        return "Self Pickup"
+            return f"Pickup - {hour}:{minute} {ampm}"
+        return "Pickup"
     tags = order["tags"]
     m = re.search(r"\b\d{1,2}(?::\d{2})?\s*(?:AM|PM|am|pm)\b", tags)
     if m:
@@ -129,6 +129,16 @@ def update_addons_using_sku(sku, ribbon, music_box, polaroid, scent):
             updated_addon_list[3].append(str(scent_option))
 
     return updated_addon_list
+
+def get_delivery_type(order, item):
+    delivery_type = None
+    for prop in item["properties"]:
+        if prop["name"] == "Selection":
+            delivery_type = prop["value"]   # "Delivery" or "Pickup"
+            break
+    if "pickup" in order["tags"].lower() or "pick up" in order["tags"].lower():
+        delivery_type = "Pickup"
+    return delivery_type
     
 
 # main function to process orders
@@ -147,7 +157,8 @@ def process_orders():
                 "product": item["title"],
                 "qty": item["quantity"],
                 "delivery_date": standardise_date(get_delivery_date(order, item)),
-                "delivery_slot": get_delivery_slot(order, item)
+                "delivery_slot": get_delivery_slot(order, item),
+                "delivery_type": get_delivery_type(order, item)
             })
 
     df = pd.DataFrame(rows)
@@ -163,6 +174,7 @@ def process_orders():
         qty = None
         delivery_date = None
         delivery_slot = None
+        delivery_type = None
 
         for _, row in group.iterrows():
             sku = row["sku"]
@@ -182,9 +194,10 @@ def process_orders():
                 qty = row["qty"]
                 delivery_date = row["delivery_date"]
                 delivery_slot = row["delivery_slot"]
+                delivery_type = row["delivery_type"]
 
         if main_sku is None:
-            main_sku = "CUSTOM ORDER"
+            main_sku = "CUSTOM ORDER (Please check details manually)"
 
         [ribbon, music_box, polaroid, scent] = update_addons_using_sku(main_sku, ribbon, music_box, polaroid, scent)
         
@@ -198,17 +211,16 @@ def process_orders():
             "Polaroid": polaroid,
             "Scent": scent,
             "Delivery Slot": delivery_slot,
-            "Delivery Date": delivery_date
+            "Delivery Date": delivery_date,
+            "Delivery Type": delivery_type
         })
 
     processed_df = pd.DataFrame(processed_rows)
 
     # only keep relevant orders from today onwards
-    today = pd.Timestamp.today().normalize()
+    today = pd.Timestamp.now(tz="Asia/Singapore").date()
     processed_df["Delivery Date"] = pd.to_datetime(
-        processed_df["Delivery Date"],
-        errors="coerce"
-    )
+    processed_df["Delivery Date"], errors="coerce").dt.date
     current_orders_df = processed_df[processed_df["Delivery Date"] >= today]
 
     # sort orders
@@ -216,4 +228,5 @@ def process_orders():
     sorted_processed_df.to_csv("sorted_processed_df.csv", index=False)
 
     return  sorted_processed_df
+
 
