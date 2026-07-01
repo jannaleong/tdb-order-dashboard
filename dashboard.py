@@ -55,7 +55,9 @@ if selected_slot != "All":
         filtered["Delivery Slot"] == selected_slot
     ]
 
+
 filtered = filtered.sort_values(by="SKU")
+display_df = filtered.drop(columns=['Delivery Date', 'Delivery Slot'])
 
 st.dataframe(
     filtered,
