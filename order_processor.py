@@ -196,7 +196,6 @@ def process_orders():
                 delivery_slot = row["delivery_slot"]
                 delivery_type = row["delivery_type"]
 
-        # if main_sku is None:
         if pd.isna(main_sku) or str(main_sku).strip() == "":
             main_sku = "CUSTOM ORDER (Please check details manually)"
 

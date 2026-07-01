@@ -23,7 +23,7 @@ def check_password():
 
 if not check_password():
     st.stop()
-    
+
 # set windows tab
 st.set_page_config(
     page_title="The Daily Blooms Dashboard",
@@ -65,12 +65,18 @@ else:
 filtered = filtered.sort_values(by="SKU")
 display_df = filtered.drop(columns=['Delivery Date', 'Delivery Slot'])
 
+
+row_height = 35        # Approximate height of each row (pixels)
+header_height = 38     # Header height
+max_height = 700       # Don't let it grow indefinitely
+
+height = min(header_height + len(display_df) * row_height, max_height)
+
 st.dataframe(
     display_df,
     use_container_width=True,
-    height=700
+    height=height
 )
-
 
 
 # summary tables 
