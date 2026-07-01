@@ -78,6 +78,7 @@ st.dataframe(
     height=height
 )
 
+st.markdown("<br>", unsafe_allow_html=True)
 
 # summary tables 
 
