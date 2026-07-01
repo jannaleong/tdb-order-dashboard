@@ -196,7 +196,8 @@ def process_orders():
                 delivery_slot = row["delivery_slot"]
                 delivery_type = row["delivery_type"]
 
-        if main_sku is None:
+        # if main_sku is None:
+        if pd.isna(main_sku) or str(main_sku).strip() == "":
             main_sku = "CUSTOM ORDER (Please check details manually)"
 
         [ribbon, music_box, polaroid, scent] = update_addons_using_sku(main_sku, ribbon, music_box, polaroid, scent)
