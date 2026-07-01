@@ -111,6 +111,26 @@ def get_delivery_slot(order, item):
 
     return None
 
+def update_addons_using_sku(sku, ribbon, music_box, polaroid, scent):
+    lowercase_sku = str(sku).lower()
+    updated_addon_list = [ribbon, music_box.copy(), polaroid, scent.copy()]
+    if "ribbon" in lowercase_sku:
+        updated_addon_list[0] = True
+
+    for music_option in MUSIC_BOX_SKUS:
+        if str(music_option).lower() in lowercase_sku:
+            updated_addon_list[1].append(str(music_option))
+
+    if "polaroid" in lowercase_sku:
+        updated_addon_list[2] = True
+
+    for scent_option in SCENT_SKUS:
+        if str(scent_option).lower() in lowercase_sku:
+            updated_addon_list[3].append(str(scent_option))
+
+    return updated_addon_list
+    
+
 # main function to process orders
 def process_orders():
     orders = get_orders()
@@ -165,6 +185,9 @@ def process_orders():
 
         if main_sku is None:
             main_sku = "CUSTOM ORDER"
+
+        [ribbon, music_box, polaroid, scent] = update_addons_using_sku(main_sku, ribbon, music_box, polaroid, scent)
+        
 
         processed_rows.append({
             "Order": order_id,
